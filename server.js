@@ -1,3 +1,4 @@
+// server.js with chat support
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -42,6 +43,10 @@ io.on('connection', (socket) => {
       guesses: game.guesses,
       wrong: game.wrong
     });
+  });
+
+  socket.on('chatMessage', ({ code, message }) => {
+    io.to(code).emit('chatMessage', message);
   });
 });
 
