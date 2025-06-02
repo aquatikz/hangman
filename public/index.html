@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Multiplayer Hangman</title>
+  <style>
+    body { font-family: Arial; text-align: center; padding: 20px; }
+    input, button { margin: 5px; }
+    #gameBoard { margin-top: 20px; font-size: 24px; letter-spacing: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Multiplayer Hangman</h1>
+
+  <div id="setup">
+    <input id="wordInput" type="text" placeholder="Word to guess">
+    <button onclick="createGame()">Create Game</button>
+    <br>
+    <input id="joinCode" type="text" placeholder="Game code">
+    <button onclick="joinGame()">Join Game</button>
+  </div>
+
+  <div id="game" style="display:none">
+    <p id="codeDisplay"></p>
+    <div id="gameBoard"></div>
+    <p>Wrong letters: <span id="wrongLetters"></span></p>
+    <input id="guessInput" maxlength="1" placeholder="Enter letter">
+    <button onclick="submitGuess()">Guess</button>
+    <br>
+    <button onclick="rematch()">Rematch</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let gameCode = '';
+    let guessedLetters = [];
+
+    function createGame() {
+      const word = document.getElementById('wordInput').value;
+      if (!word) return alert(\"Enter a word\");
+      socket.emit('createGame', word, (code) => {
+        gameCode = code;
+        document.getElementById('codeDisplay').innerText = `Game Code: ${code}`;
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('game').style.display = 'block';
+      });
+    }
+
+    function joinGame() {
+      const code = document.getElementById('joinCode').value.toUpperCase();
+      socket.emit('joinGame', code, (success) => {
+        if (success) {
+          gameCode = code;
+          document.getElementById('codeDisplay').innerText = `Game Code: ${code}`;
+          document.getElementById('setup').style.display = 'none';
+          document.getElementById('game').style.display = 'block';
+        } else {
+          alert('Invalid game code');
+        }
+      });
+    }
+
+    function submitGuess() {
+      const input = document.getElementById('guessInput');
+      const letter = input.value.toLowerCase();
+      input.value = '';
+      if (!letter || guessedLetters.includes(letter)) return;
+      guessedLetters.push(letter);
+      socket.emit('guessLetter', { code: gameCode, letter });
+    }
+
+    function rematch() {
+      location.reload();
+    }
+
+    socket.on('updateGame', ({ word, guesses, wrong }) => {
+      let display = '';
+      for (const char of word) {
+        display += guesses.includes(char) ? char + ' ' : '_ ';
+      }
+      document.getElementById('gameBoard').innerText = display.trim();
+      document.getElementById('wrongLetters').innerText = wrong.join(', ');
+    });
+  </script>
+</body>
+</html>
