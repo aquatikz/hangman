@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Multiplayer Hangman</title>
+  <style>
+    body { font-family: Arial; text-align: center; padding: 20px; }
+    input, button { margin: 5px; }
+    #gameBoard { margin-top: 20px; font-size: 24px; letter-spacing: 8px; }
+    canvas { border: 1px solid black; margin-top: 20px; }
+    #chatMessages {
+      border: 1px solid #ccc;
+      height: 150px;
+      overflow-y: auto;
+      padding: 5px;
+      margin-bottom: 10px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <h1>Multiplayer Hangman</h1>
+
+  <div id="setup">
+    <input id="wordInput" type="text" placeholder="Word to guess">
+    <button onclick="createGame()">Create Game</button>
+    <br>
+    <input id="joinCode" type="text" placeholder="Game code">
+    <button onclick="joinGame()">Join Game</button>
+  </div>
+
+  <div id="game" style="display:none">
+    <p id="codeDisplay"></p>
+    <div id="gameBoard"></div>
+    <p>Wrong letters: <span id="wrongLetters"></span></p>
+    <input id="guessInput" maxlength="1" placeholder="Enter letter">
+    <button onclick="submitGuess()">Guess</button>
+    <br>
+    <button onclick="rematch()">Rematch</button>
+    <br>
+    <canvas id="hangmanCanvas" width="200" height="250"></canvas>
+    <p id="gameResult" style="font-weight: bold; font-size: 20px;"></p>
+
+    <div id="chatBox" style="margin-top: 30px;">
+      <h3>Chat</h3>
+      <div id="chatMessages"></div>
+      <input id="chatInput" type="text" placeholder="Type a message" style="width:70%;">
+      <button onclick="sendChat()">Send</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let gameCode = '';
+    let guessedLetters = [];
+    let gameOver = false;
+    const canvas = document.getElementById('hangmanCanvas');
+    const ctx = canvas.getContext('2d');
+
+    document.getElementById('wordInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') createGame();
+    });
+
+    document.getElementById('joinCode').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') joinGame();
+    });
+
+    document.getElementById('guessInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') submitGuess();
+    });
+
+    function createGame() {
+      const word = document.getElementById('wordInput').value;
+      if (!word) return alert("Enter a word");
+      socket.emit('createGame', word, (code) => {
+        gameCode = code;
+        document.getElementById('codeDisplay').innerText = `Game Code: ${code}`;
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('game').style.display = 'block';
+        drawGallows();
+      });
+    }
+
+    function joinGame() {
+      const code = document.getElementById('joinCode').value.toUpperCase();
+      socket.emit('joinGame', code, (success) => {
+        if (success) {
+          gameCode = code;
+          document.getElementById('codeDisplay').innerText = `Game Code: ${code}`;
+          document.getElementById('setup').style.display = 'none';
+          document.getElementById('game').style.display = 'block';
+          drawGallows();
+        } else {
+          alert('Invalid game code');
+        }
+      });
+    }
+
+    function submitGuess() {
+      if (gameOver) return;
+      const input = document.getElementById('guessInput');
+      const letter = input.value.toLowerCase();
+      input.value = '';
+      if (!letter || guessedLetters.includes(letter)) return;
+      guessedLetters.push(letter);
+      socket.emit('guessLetter', { code: gameCode, letter });
+    }
+
+    function rematch() {
+      location.reload();
+    }
+
+    function drawGallows() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(10, 240); ctx.lineTo(190, 240); // base
+      ctx.moveTo(50, 240); ctx.lineTo(50, 20);   // pole
+      ctx.lineTo(130, 20);                       // top
+      ctx.lineTo(130, 40);                       // rope drop
+      ctx.stroke();
+    }
+
+    function drawHangman(wrongCount) {
+      ctx.lineWidth = 2;
+      switch (wrongCount) {
+        case 1:
+          ctx.beginPath(); ctx.arc(130, 60, 20, 0, Math.PI * 2); ctx.stroke(); break;
+        case 2:
+          ctx.beginPath(); ctx.moveTo(130, 80); ctx.lineTo(130, 140); ctx.stroke(); break;
+        case 3:
+          ctx.beginPath(); ctx.moveTo(130, 100); ctx.lineTo(100, 120); ctx.stroke(); break;
+        case 4:
+          ctx.beginPath(); ctx.moveTo(130, 100); ctx.lineTo(160, 120); ctx.stroke(); break;
+        case 5:
+          ctx.beginPath(); ctx.moveTo(130, 140); ctx.lineTo(100, 180); ctx.stroke(); break;
+        case 6:
+          ctx.beginPath(); ctx.moveTo(130, 140); ctx.lineTo(160, 180); ctx.stroke(); break;
+      }
+    }
+
+    function sendChat() {
+      const input = document.getElementById('chatInput');
+      const message = input.value.trim();
+      if (!message) return;
+      socket.emit('chatMessage', { code: gameCode, message });
+      input.value = '';
+    }
+
+    socket.on('chatMessage', (msg) => {
+      const chat = document.getElementById('chatMessages');
+      const newMsg = document.createElement('div');
+      newMsg.textContent = msg;
+      chat.appendChild(newMsg);
+      chat.scrollTop = chat.scrollHeight;
+    });
+
+    socket.on('updateGame', ({ word, guesses, wrong }) => {
+      if (gameOver) return;
+
+      let display = '';
+      for (const char of word) {
+        display += guesses.includes(char) ? char + ' ' : '_ ';
+      }
+
+      document.getElementById('gameBoard').innerText = display.trim();
+      document.getElementById('wrongLetters').innerText = wrong.join(', ');
+
+      drawGallows();
+      for (let i = 1; i <= wrong.length; i++) {
+        drawHangman(i);
+      }
+
+      if (!display.includes('_')) {
+        document.getElementById('gameResult').textContent = '🎉 Congratulations! You guessed the word!';
+        gameOver = true;
+      } else if (wrong.length >= 6) {
+        document.getElementById('gameResult').textContent = `💀 You lose! The word was: ${word}`;
+        gameOver = true;
+      }
+    });
+  </script>
+</body>
+</html>
