@@ -39,6 +39,7 @@
     <button onclick="rematch()">Rematch</button>
     <br>
     <canvas id="hangmanCanvas" width="200" height="250"></canvas>
+    <p id="gameResult" style="font-weight: bold; font-size: 20px;"></p>
 
     <div id="chatBox" style="margin-top: 30px;">
       <h3>Chat</h3>
@@ -53,8 +54,21 @@
     const socket = io();
     let gameCode = '';
     let guessedLetters = [];
+    let gameOver = false;
     const canvas = document.getElementById('hangmanCanvas');
     const ctx = canvas.getContext('2d');
+
+    document.getElementById('wordInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') createGame();
+    });
+
+    document.getElementById('joinCode').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') joinGame();
+    });
+
+    document.getElementById('guessInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') submitGuess();
+    });
 
     function createGame() {
       const word = document.getElementById('wordInput').value;
@@ -84,6 +98,7 @@
     }
 
     function submitGuess() {
+      if (gameOver) return;
       const input = document.getElementById('guessInput');
       const letter = input.value.toLowerCase();
       input.value = '';
@@ -111,17 +126,17 @@
       ctx.lineWidth = 2;
       switch (wrongCount) {
         case 1:
-          ctx.beginPath(); ctx.arc(130, 60, 20, 0, Math.PI * 2); ctx.stroke(); break; // head
+          ctx.beginPath(); ctx.arc(130, 60, 20, 0, Math.PI * 2); ctx.stroke(); break;
         case 2:
-          ctx.beginPath(); ctx.moveTo(130, 80); ctx.lineTo(130, 140); ctx.stroke(); break; // body
+          ctx.beginPath(); ctx.moveTo(130, 80); ctx.lineTo(130, 140); ctx.stroke(); break;
         case 3:
-          ctx.beginPath(); ctx.moveTo(130, 100); ctx.lineTo(100, 120); ctx.stroke(); break; // left arm
+          ctx.beginPath(); ctx.moveTo(130, 100); ctx.lineTo(100, 120); ctx.stroke(); break;
         case 4:
-          ctx.beginPath(); ctx.moveTo(130, 100); ctx.lineTo(160, 120); ctx.stroke(); break; // right arm
+          ctx.beginPath(); ctx.moveTo(130, 100); ctx.lineTo(160, 120); ctx.stroke(); break;
         case 5:
-          ctx.beginPath(); ctx.moveTo(130, 140); ctx.lineTo(100, 180); ctx.stroke(); break; // left leg
+          ctx.beginPath(); ctx.moveTo(130, 140); ctx.lineTo(100, 180); ctx.stroke(); break;
         case 6:
-          ctx.beginPath(); ctx.moveTo(130, 140); ctx.lineTo(160, 180); ctx.stroke(); break; // right leg
+          ctx.beginPath(); ctx.moveTo(130, 140); ctx.lineTo(160, 180); ctx.stroke(); break;
       }
     }
 
@@ -142,15 +157,27 @@
     });
 
     socket.on('updateGame', ({ word, guesses, wrong }) => {
+      if (gameOver) return;
+
       let display = '';
       for (const char of word) {
         display += guesses.includes(char) ? char + ' ' : '_ ';
       }
+
       document.getElementById('gameBoard').innerText = display.trim();
       document.getElementById('wrongLetters').innerText = wrong.join(', ');
+
       drawGallows();
       for (let i = 1; i <= wrong.length; i++) {
         drawHangman(i);
+      }
+
+      if (!display.includes('_')) {
+        document.getElementById('gameResult').textContent = '🎉 Congratulations! You guessed the word!';
+        gameOver = true;
+      } else if (wrong.length >= 6) {
+        document.getElementById('gameResult').textContent = `💀 You lose! The word was: ${word}`;
+        gameOver = true;
       }
     });
   </script>
